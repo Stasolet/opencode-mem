@@ -58,6 +58,13 @@ interface OpenCodeMemConfig {
   memoryExtraParams?: Record<string, unknown>;
   opencodeProvider?: string;
   opencodeModel?: string;
+  /**
+   * Optional model variant (reasoning effort) for internal structured-output
+   * requests (auto-capture, profile learning, dedup/conflict checks).
+   * Must match a variant name defined in the opencode model config
+   * (e.g. "fast"). Unset = server default variant for the captured model.
+   */
+  opencodeVariant?: string;
   aiSessionRetentionDays?: number;
   webServerEnabled?: boolean;
   webServerPort?: number;
@@ -141,6 +148,7 @@ const DEFAULTS: Required<
     | "memoryExtraParams"
     | "opencodeProvider"
     | "opencodeModel"
+    | "opencodeVariant"
     | "autoCaptureLanguage"
     | "userEmailOverride"
     | "userNameOverride"
@@ -161,6 +169,7 @@ const DEFAULTS: Required<
   memoryExtraParams?: Record<string, unknown>;
   opencodeProvider?: string;
   opencodeModel?: string;
+  opencodeVariant?: string;
   autoCaptureLanguage?: string;
   userEmailOverride?: string;
   userNameOverride?: string;
@@ -393,6 +402,9 @@ const CONFIG_TEMPLATE = `{
    //
    // "opencodeProvider": "anthropic",
    // "opencodeModel": "claude-haiku-4-5-20251001",
+   // Variant (reasoning effort) used for internal capture/learning requests;
+   // must be a variant defined in your opencode model config (omit for default):
+   // "opencodeVariant": "fast",
 
    // ============================================
    // Auto-Capture Settings
@@ -741,6 +753,7 @@ function buildConfig(fileConfig: OpenCodeMemConfig) {
     memoryExtraParams: fileConfig.memoryExtraParams,
     opencodeProvider: fileConfig.opencodeProvider,
     opencodeModel: fileConfig.opencodeModel,
+    opencodeVariant: fileConfig.opencodeVariant,
     autoCaptureProviderStatus: getAutoCaptureProviderStatus({
       opencodeProvider: fileConfig.opencodeProvider,
       opencodeModel: fileConfig.opencodeModel,

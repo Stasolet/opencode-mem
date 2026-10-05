@@ -142,6 +142,7 @@ function sessionCreateBody(): Record<string, unknown> {
 function sessionPromptFields(args: {
   providerID: string;
   modelID: string;
+  variant?: string;
   systemPrompt: string;
   userPrompt: string;
   jsonSchema: Record<string, unknown>;
@@ -149,6 +150,7 @@ function sessionPromptFields(args: {
 }): Record<string, unknown> {
   return {
     model: { providerID: args.providerID, modelID: args.modelID },
+    ...(args.variant ? { variant: args.variant } : {}),
     agent: STRUCTURED_OUTPUT_AGENT,
     system: args.systemPrompt,
     parts: [{ type: "text", text: args.userPrompt }],
@@ -168,6 +170,7 @@ export interface StructuredOutputOptions<T> {
   client: OpencodeClient;
   providerID: string;
   modelID: string;
+  variant?: string;
   systemPrompt: string;
   userPrompt: string;
   schema: z.ZodType<T>;
@@ -237,7 +240,7 @@ export async function generateStructuredOutput<T>(opts: StructuredOutputOptions<
     providerID: opts.providerID,
     modelID: opts.modelID,
   });
-  const { client, systemPrompt, userPrompt, schema, directory, retryCount } = opts;
+  const { client, systemPrompt, userPrompt, schema, directory, retryCount, variant } = opts;
   const { providerID, modelID } = resolved;
 
   const jsonSchema =
@@ -251,6 +254,7 @@ export async function generateStructuredOutput<T>(opts: StructuredOutputOptions<
     return generateViaSdkClient(client, {
       providerID,
       modelID,
+      variant,
       systemPrompt,
       userPrompt,
       directory,
@@ -278,6 +282,7 @@ export async function generateStructuredOutput<T>(opts: StructuredOutputOptions<
           directory,
           providerID,
           modelID,
+          variant,
           systemPrompt,
           userPrompt,
           jsonSchema,
@@ -326,6 +331,7 @@ type V2SessionClient = {
 interface SdkStructuredOutputArgs<T> {
   providerID: string;
   modelID: string;
+  variant?: string;
   systemPrompt: string;
   userPrompt: string;
   directory?: string;
@@ -502,6 +508,7 @@ interface PromptSessionArgs {
   directory?: string;
   providerID: string;
   modelID: string;
+  variant?: string;
   systemPrompt: string;
   userPrompt: string;
   jsonSchema: Record<string, unknown>;
