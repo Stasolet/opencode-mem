@@ -376,6 +376,8 @@ If `opencodeProvider` and `opencodeModel` are set, they take precedence over the
 
 **Follow the session model:** set `"opencodeModel": "inherit"` to use a concrete OpenCode model at call time instead of a pinned id. For **auto-capture**, each prompt is recorded via the `chat.params` hook and the capture request reuses that prompt's provider/model. For **profile learning** and other structured-output paths (which are not tied to a single user message), `inherit` falls back to the most recent model in OpenCode's `model.json` recent list (preferring the configured `opencodeProvider`). Sending the literal model id `inherit` is never valid and previously caused `ProviderModelNotFoundError: Model not found: <provider>/inherit` on those paths. `opencodeProvider` is still required as the normal config gate.
 
+**Reasoning variant (local patch: `opencodeVariant`):** set `"opencodeVariant": "<variant>"` (e.g. `"fast"`, `"minimal"`, `"none"` — provider-specific) to route internal structured-output calls (auto-capture, profile learning, dedup, conflict detection) through a cheaper reasoning variant instead of the model default. Variants are defined per provider/model, so with `"opencodeModel": "inherit"` the configured variant may not exist on the inherited provider; in that case the plugin logs `variant unavailable for inherited model, retrying without it` and falls back to the same model with the default variant rather than failing the capture.
+
 **Fallback:** Manual API configuration (if not using opencodeProvider):
 
 ```jsonc

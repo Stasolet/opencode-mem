@@ -81,6 +81,63 @@ describe("OpenCode v2 legacy client bridge", () => {
     expect((await client.session.delete({ sessionID })).data).toBe(true);
   });
 
+  it("retries generation without variant when the inherited provider lacks it", async () => {
+    const models: any[] = [];
+    const ctx = createContext({
+      generate: {
+        text: async (input: any) => {
+          models.push(input.model);
+          if (input.model?.variant) {
+            throw new Error(
+              `Variant unavailable for ${input.model.providerID}/${input.model.id}: ${input.model.variant}`
+            );
+          }
+          return { text: '{"summary":"done","tags":["v2"]}' };
+        },
+      },
+    });
+    const client = createLegacyClient(ctx);
+
+    const created = await client.session.create({ title: "capture" });
+    const result = await client.session.prompt({
+      sessionID: created.data.id,
+      model: { providerID: "alibaba-token-plan", modelID: "qwen3.8-max" },
+      variant: "fast",
+      parts: [{ type: "text", text: "work" }],
+      format: { type: "json_schema", schema: { type: "object", properties: {} } },
+    });
+
+    expect(models).toEqual([
+      { providerID: "alibaba-token-plan", id: "qwen3.8-max", variant: "fast" },
+      { providerID: "alibaba-token-plan", id: "qwen3.8-max" },
+    ]);
+    expect(result.data.info.structured_output).toEqual({ summary: "done", tags: ["v2"] });
+  });
+
+  it("propagates non-variant generation errors unchanged", async () => {
+    let calls = 0;
+    const ctx = createContext({
+      generate: {
+        text: async () => {
+          calls += 1;
+          throw new Error("model overloaded");
+        },
+      },
+    });
+    const client = createLegacyClient(ctx);
+
+    const created = await client.session.create({ title: "capture" });
+    await expect(
+      client.session.prompt({
+        sessionID: created.data.id,
+        model: { providerID: "alibaba-token-plan", modelID: "qwen3.8-max" },
+        variant: "fast",
+        parts: [{ type: "text", text: "work" }],
+      })
+    ).rejects.toThrow("model overloaded");
+    expect(calls).toBe(1);
+  });
+
   it("maps V1 noReply prompts to V2 synthetic messages", async () => {
     let syntheticInput: any;
     const ctx = createContext({
