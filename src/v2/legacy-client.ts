@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import type { MemToastPayload } from "./toast-rpc.js";
 
+import { log } from "../services/logger.js";
+
 type LegacyPart = { type?: string; text?: string; metadata?: unknown };
 
 function textFromParts(parts: LegacyPart[] = []): string {
@@ -290,23 +292,44 @@ export function createLegacyClient(ctx: Context, toastRpc?: ToastEmitter) {
         const body = bodyFrom(input);
 
         if (generatedSessions.has(sessionID)) {
-          const model =
+          const baseModel =
             body.model?.providerID && body.model?.modelID
-              ? {
-                  providerID: body.model.providerID,
-                  id: body.model.modelID,
-                  // V1 prompt bodies carry the variant as a sibling of `model`
-                  // (SessionPromptData.body.variant); the V2 Generate API
-                  // takes it inside the model object.
-                  ...(typeof body.variant === "string" && body.variant
-                    ? { variant: body.variant }
-                    : {}),
-                }
+              ? { providerID: body.model.providerID, id: body.model.modelID }
               : undefined;
-          const generated = await ctx.generate.text({
-            prompt: schemaPrompt(body),
-            ...(model ? { model } : {}),
-          });
+          // V1 prompt bodies carry the reasoning variant as a sibling of `model`
+          // (SessionPromptData.body.variant); the V2 Generate API takes it inside
+          // the model object. Blank variants are treated as unset.
+          const model =
+            baseModel && typeof body.variant === "string" && body.variant
+              ? { ...baseModel, variant: body.variant }
+              : baseModel;
+
+          let generated;
+          try {
+            generated = await ctx.generate.text({
+              prompt: schemaPrompt(body),
+              ...(model ? { model } : {}),
+            });
+          } catch (error) {
+            // opencodeVariant (e.g. "fast") is provider-specific: with model
+            // inheritance the session provider may not define it and the
+            // server rejects the call with "Variant unavailable ...". Retry
+            // once on the same inherited model without the variant rather
+            // than losing the generation entirely.
+            const message = error instanceof Error ? error.message : String(error);
+            if (!baseModel || model === baseModel || !/variant unavailable/i.test(message)) {
+              throw error;
+            }
+            log("v2 generate: variant unavailable for inherited model, retrying without it", {
+              providerID: baseModel.providerID,
+              modelID: baseModel.id,
+              variant: body.variant,
+            });
+            generated = await ctx.generate.text({
+              prompt: schemaPrompt(body),
+              model: baseModel,
+            });
+          }
           const text = generated?.text ?? "";
           const structured = body.format?.type === "json_schema" ? parseJson(text) : undefined;
           return {
