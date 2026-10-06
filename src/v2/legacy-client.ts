@@ -122,11 +122,29 @@ export function createLegacyClient(ctx: Context) {
     app: { log: async () => ({ data: true }) },
     provider: {
       list: async () => {
-        const models = await ctx.model.list();
-        const connected = [
-          ...new Set(models.data.map((model) => model.providerID).filter(Boolean)),
-        ];
-        return { data: { connected } };
+        // Union of providers that have loaded models AND explicitly enabled
+        // providers from the provider catalog. OpenCode registers custom
+        // provider model catalogs lazily after service start, so
+        // ctx.model.list() alone misses providers (e.g. llama.cpp) when the
+        // plugin queries it during init.
+        const connected = new Set<string>();
+        try {
+          const models = await ctx.model.list();
+          for (const model of models.data ?? []) {
+            if (model.providerID) connected.add(model.providerID);
+          }
+        } catch {
+          // fall back to the provider catalog below
+        }
+        try {
+          const providers = await ctx.provider.list();
+          for (const provider of providers.data ?? []) {
+            if (provider.activation === "enabled") connected.add(provider.id);
+          }
+        } catch {
+          // provider catalog unavailable on older hosts
+        }
+        return { data: { connected: [...connected] } };
       },
     },
     tui: {
@@ -165,7 +183,11 @@ export function createLegacyClient(ctx: Context) {
         if (generatedSessions.has(sessionID)) {
           const model =
             body.model?.providerID && body.model?.modelID
-              ? { providerID: body.model.providerID, id: body.model.modelID }
+              ? {
+                  providerID: body.model.providerID,
+                  id: body.model.modelID,
+                  ...(typeof body.variant === "string" ? { variant: body.variant } : {}),
+                }
               : undefined;
           const generated = await ctx.generate.text({
             prompt: schemaPrompt(body),

@@ -18,9 +18,9 @@ export async function getOpenCodeClient(): Promise<OpencodeClient> {
     return _cachedClient;
   }
 
-  const { isProviderConnected, getV2Client } = await loadOpencodeProvider();
+  const { ensureProviderConnected, getV2Client } = await loadOpencodeProvider();
 
-  if (!isProviderConnected(provider)) {
+  if (!(await ensureProviderConnected(provider))) {
     throw new Error(
       `opencode provider '${provider}' is not connected. Check your opencode provider configuration.`
     );

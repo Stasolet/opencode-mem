@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { z } from "zod";
 import {
   createV2Client,
+  ensureProviderConnected,
   generateStructuredOutput,
   getV2Client,
   isInternalStructuredSession,
@@ -86,6 +87,30 @@ describe("connected providers state", () => {
     setConnectedProviders(["openai"]);
     expect(isProviderConnected("anthropic")).toBe(false);
     expect(isProviderConnected("openai")).toBe(true);
+  });
+
+  it("ensureProviderConnected refreshes the cached set when provider list expands", async () => {
+    // Clear any state and use a fresh timestamp window for the throttle.
+    setConnectedProviders(["opencode"]);
+    const client = {
+      provider: {
+        list: async () => ({ data: { connected: ["opencode", "llama.cpp"] } }),
+      },
+    };
+    setV2Client(client as any);
+    expect(await ensureProviderConnected("llama.cpp")).toBe(true);
+    expect(isProviderConnected("llama.cpp")).toBe(true);
+  });
+
+  it("ensureProviderConnected reports unknown providers as disconnected", async () => {
+    setConnectedProviders(["opencode"]);
+    const client = {
+      provider: {
+        list: async () => ({ data: { connected: ["opencode"] } }),
+      },
+    };
+    setV2Client(client as any);
+    expect(await ensureProviderConnected("does-not-exist")).toBe(false);
   });
 });
 

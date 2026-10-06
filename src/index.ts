@@ -297,22 +297,49 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
   await configureOpencodeHostTransport(ctx);
 
   (async () => {
-    try {
-      const providerResult = await ctx.client.provider.list();
-      if (providerResult.data?.connected) {
+    // OpenCode registers custom providers (config `provider` entries) in the
+    // plugin catalog lazily, some time after service start; querying once at
+    // init used to capture only built-in providers and permanently mark
+    // llama.cpp/routerai-style providers as disconnected (auto-capture then
+    // failed until the next restart). Retry until the configured provider
+    // shows up, with a bounded number of attempts.
+    const wanted = CONFIG.opencodeProvider;
+    const maxAttempts = 6;
+    if (typeof ctx.client?.provider?.list !== "function") {
+      // Test hosts and older SDKs may not expose provider.list at all.
+      // Nothing to cache and nothing to wait for; ensureProviderConnected
+      // will keep probing lazily if a real client appears later.
+      log("opencode provider list API unavailable; deferring to lazy refresh");
+      return;
+    }
+    // Without a configured opencodeProvider there is nothing specific to
+    // wait for; a single attempt keeps headless/test hosts from lingering.
+    const attempts = wanted ? maxAttempts : 1;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        const providerResult = await ctx.client.provider.list();
+        const connected = providerResult.data?.connected;
+        if (!Array.isArray(connected) || connected.length === 0) {
+          // Host does not report providers at all (older/test hosts). One
+          // attempt only; ensureProviderConnected re-queries lazily later.
+          log("opencode provider list empty or failed", {
+            data: JSON.stringify(providerResult.data).substring(0, 100),
+          });
+          return;
+        }
         const { setConnectedProviders } = await loadOpencodeProvider();
-        setConnectedProviders(providerResult.data.connected);
+        setConnectedProviders(connected);
         log("opencode providers connected", {
-          list: providerResult.data.connected,
-          configured: CONFIG.opencodeProvider || "(not set)",
+          list: connected,
+          configured: wanted || "(not set)",
+          attempt,
         });
-      } else {
-        log("opencode provider list empty or failed", {
-          data: JSON.stringify(providerResult.data).substring(0, 100),
-        });
+        if (!wanted || connected.includes(wanted)) return;
+      } catch (error) {
+        log("Failed to initialize opencode provider state", { error: String(error) });
+        return;
       }
-    } catch (error) {
-      log("Failed to initialize opencode provider state", { error: String(error) });
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 5000));
     }
   })();
 

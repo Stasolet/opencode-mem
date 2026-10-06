@@ -92,6 +92,34 @@ export function isProviderConnected(providerName: string): boolean {
   return _connectedProviders.has(providerName);
 }
 
+let _connectedProvidersFetchedAt = 0;
+
+/**
+ * Async connection check that refreshes the cached provider list when the
+ * requested provider is missing. OpenCode discovers custom providers lazily
+ * after service start, so the list cached during plugin init can be stale;
+ * re-querying on a miss removes that startup race for good.
+ */
+export async function ensureProviderConnected(providerName: string): Promise<boolean> {
+  if (_connectedProviders.has(providerName)) return true;
+  const client = getV2Client() as
+    { provider?: { list?: () => Promise<{ data?: { connected?: string[] } }> } } | undefined;
+  if (!client?.provider?.list) return false;
+  // Throttle re-queries so a misconfigured provider does not hammer the API.
+  if (Date.now() - _connectedProvidersFetchedAt < 5_000) return false;
+  _connectedProvidersFetchedAt = Date.now();
+  try {
+    const result = await client.provider.list();
+    const connected = result?.data?.connected;
+    if (Array.isArray(connected) && connected.length > 0) {
+      setConnectedProviders(connected);
+    }
+  } catch {
+    // keep the previously cached set
+  }
+  return _connectedProviders.has(providerName);
+}
+
 export function setV2Client(client: OpencodeClient): void {
   _v2Client = client;
   // Native v2 adapters pass a session-capable client without a server URL.
