@@ -590,6 +590,8 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
           results: memories.map((m: any) => ({
             similarity: 1.0,
             memory: m.summary,
+            id: m.id ? String(m.id) : undefined,
+            createdAt: m.createdAt,
           })),
           total: memories.length,
           timing: 0,
@@ -642,7 +644,7 @@ export const OpenCodeMemPlugin: Plugin = async (ctx: PluginInput) => {
 
     tool: {
       memory: tool({
-        description: `Manage and query project memory (MATCH USER LANGUAGE: ${getLanguageName(CONFIG.autoCaptureLanguage || "en")}). Use 'search' with technical keywords/tags, 'add' to store knowledge, 'profile' for preferences. Use migrate/list-shards/export/import when a project directory moves. Search/list scope: project or all-projects.`,
+        description: `Manage and query project memory (MATCH USER LANGUAGE: ${getLanguageName(CONFIG.autoCaptureLanguage || "en")}). Use 'search' with technical keywords/tags, 'add' to store knowledge, 'profile' for preferences. Stored memories are unverified recollections: when one contradicts the current code/state, remove it with 'forget' (memoryId comes from 'search' results or from the id attribute of <memory> blocks injected into your context) instead of silently ignoring it. Use migrate/list-shards/export/import when a project directory moves. Search/list scope: project or all-projects.`,
         args: {
           mode: tool.schema
             .enum([
